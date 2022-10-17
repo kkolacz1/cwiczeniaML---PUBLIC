@@ -1,0 +1,175 @@
+# Zadanie1: Zdefiniuj klasę implementującą regresję liniową z regularyzacją L1/L2 dla dowolnej liczby zmiennych.
+
+
+class LinearModel2v:
+    def __init__(self, eta=0.001, diff=0.001, w1=1, w2=1, w0=1, maxiter=1000, alfa=0, regression='L1'):
+        self.eta = eta
+        self.diff = diff
+        self.w1 = w1
+        self.w2 = w2
+        self.w0 = w0
+        self.maxiter = maxiter
+        self.alfa = alfa
+        self.regression = regression  # argument responsible for regularization choice. Possible options: 'L0' 'L1' 'L2'
+
+    def loss_function(self, X, t):  # loss_function responsible for determining regression score
+        N = len(X)
+        C = 0
+        for i in range(N):
+            C += (X[i][0] * self.w1 + X[i][1] * self.w2 + self.w0 - t[i]) ** 2
+            # if math.isinf(C) or math.isnan(C):
+            #     breakpoint()
+
+        match self.regression:  # now adding LF+ parameter responsible for regularization
+
+            case 'L1':
+                lfp = self.alfa * (abs(self.w1) + abs(self.w2) + abs(self.w0))
+            case 'L2':
+                lfp = self.alfa * (self.w1**2 + self.w2**2 + self.w0**2)
+            case _:
+                lfp = 0
+
+        return C / (2 * N) + lfp
+
+    def update_weights(self, X, t):  # function responsible for updating model weights, will break for large 'eta' values
+        N = len(X)
+        dC1 = 0
+        dC2 = 0
+        dC0 = 0
+        for i in range(N):
+            y_pred = X[i][0] * self.w1 + X[i][1] * self.w2 + self.w0
+            dC1 += 2 * X[i][0] * (y_pred - t[i])
+            dC2 += 2 * X[i][1] * (y_pred - t[i])
+            dC0 += 2 * (y_pred - t[i])
+
+        self.w1 = self.w1 - self.eta * dC1 / (2 * N)
+        self.w2 = self.w2 - self.eta * dC2 / (2 * N)
+        self.w0 = self.w0 - self.eta * dC0 / (2 * N)
+
+        # if self.w1 > 1e100:
+        #     breakpoint()
+
+    def train(self, X, t):  # calls update_weights, until difference in loss_function is < diff or limit is reached
+        l = []
+        ile = 0
+        while True:
+            l.append(self.loss_function(X, t))
+            self.update_weights(X, t)
+            ile += 1
+            if len(l) > 2:
+                if abs(l[-1] - l[-2]) / l[-1] < self.diff or ile > self.maxiter:
+                    break
+# Zadanie2: Wybierz dowolny zbiór danych lub wygeneruj syntetyczne dane. Zastosuj model regresji liniowej z regularyzacją L1.
+#Na podstawie zbioru walidacyjnego wybierz optymalne parametry ni oraz alfa (rozważ chociaż 15-20 różnych kombinacji).
+
+import numpy as np
+import matplotlib.pyplot as plt
+import itertools
+from sklearn.model_selection import train_test_split
+from sklearn.datasets import load_boston
+from Zadanie1 import LinearModel2v
+
+# imports ML data from boston dataset
+boston_data = load_boston()
+d = boston_data['data']
+d2 = d[:, [2,5]] #wyciągamy tylko 2 cechy: INDUS, RM
+target = boston_data['target']
+
+# split dataset into training and validation
+X_train, X_test, y_train, y_test = train_test_split(d2, target, test_size=0.4, random_state=42)
+X_walid, X_test, y_walid, y_test = train_test_split(X_test, y_test, test_size=0.5, random_state=42)
+
+# define testing values for ni and alfa
+tested_ni = list(np.logspace(-5, 0, num=30))
+tested_alfa = list(np.logspace(-10, 1, num=10))
+
+# create a combination array, which will allow to create a 3d optimization map
+combo = list(itertools.product(tested_ni, tested_alfa))
+
+# test combinations of parameters, and save loss_function into 'result' array
+# code will result in overflow in cases where linear model does not converge
+result = []
+for i in combo:
+    model = LinearModel2v(eta=i[0], alfa=i[1])
+    model.train(X_walid, y_walid)
+    result.append(model.loss_function(X_walid, y_walid))
+
+# print the combination of parameters which achieved the best score
+print(f'Najmniejsza wartosc funkcji kosztu otrzymano dla eta = {combo[result.index(min(result))][0]}, alfa = {combo[result.index(min(result))][1]} ')
+
+# plot the 3d surface map
+fig = plt.figure(figsize=(4,4))
+ax = fig.add_subplot(111, projection='3d')
+
+for idx, x in enumerate(result):
+    ax.scatter(np.log10(combo[idx][0]), np.log10(combo[idx][1]), result[idx])
+
+plt.xlabel('log10 eta')
+plt.ylabel('log10 alfa')
+ax.set_zlabel('Wartosc funkcji kosztu')
+plt.show()
+
+# Zadanie3: Uzasadnij ponizsze wartości prawdopodobieństw w oparciu o parametry modelu.
+
+import numpy as np
+from sklearn import linear_model
+import matplotlib.pyplot as plt
+import math
+
+model = linear_model.LogisticRegression()
+
+X = np.array([[1,2],[2,3],[4,5],[1,-4],[5,-7],[-3,-1]])
+y = np.array([0, 0, 0, 1, 1, 1])
+
+model.fit(X, y)
+
+# model.coef_ Wspolczynniki kierunkowe
+# output = array[-0.39682866, -0.82497163]
+
+# model.intercept_ Wyraz wolny
+# output = array([0.11932619]
+
+# model.predict([[3,3]]) Predykcja klasy
+# output = array[0]
+
+# model.predict_proba([3,3]) Obliczone prawdopodobienstwa
+# output = array([[0.97197068, 0.02802932]]))
+
+###########################
+
+# I'm not sure what's the best way to justify prediction output. I guess I'll do it by calculating the output manually?
+X1 = 3
+X2 = 3
+print(f'obliczone prawdopodobienstwo otrzymania \'1\' dla podanych X1 X2 to: {1/(1 + math.exp(-(X1*-0.39682866 + X2*-0.82497163 + 0.11932619)))}')
+# plt.scatter(X[:,0],X[:,1] )
+# plt.show()
+
+# Zadanie4: Wyznacz ponizsze prawdopodobieństwa ręcznie na podstawie parametrów modelu.
+
+from collections import Counter
+from sklearn.datasets import make_classification
+from sklearn.linear_model import LogisticRegression
+
+X, y = make_classification(n_samples=1000, n_features=10, n_informative=5, n_redundant=5, n_classes=3, random_state=1) #generating data
+
+print(X.shape, y.shape)
+print(Counter(y))
+
+model = LogisticRegression(multi_class='multinomial', solver='lbfgs')
+model.fit(X, y)
+
+print(model.coef_, model.intercept_) #parametry modelu
+
+#nowa obserwacja
+row = [1.89149379, -0.39847585, 1.63856893, 0.01647165, 1.51892395, -3.52651223, 1.80998823, 0.58810926, -0.02542177, -0.52835426]
+#przewiduje jej klasę
+yhat = model.predict([row])
+print(f'Przewidziana klasa: {yhat[0]}')
+
+## Zadanie5:
+# Wyjaśnij powyższy wykres? Co oznacza to rozgałęzienie?
+# (poniżej komentarz do wykresu)
+
+# Wykres przedstawia wplyw stezenia modelowanego skladnika na klase predykcji.
+# Ujemny wspolczynnik wagi dla wyzszych stezen sugeruje, ze wysokie stezenie dla danego skladnika ma negatywny wplyw na szanse na przypisanie do modelowanej klasy
+# Reczna ocena wykresu zdaje sie potwierdzac ta hipoteze - wysoka zawartosc popiolu, alkoholu czy aminokwasow sugerowalaby nizsza jakosc wina
